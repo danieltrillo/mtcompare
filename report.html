@@ -1,0 +1,318 @@
+<title>Switch Config Drift</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky toolbar, device rail on the left, drift sections on the right; stacks at phone width. */
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --fg:#1a2330; --muted:#5e6b7a; --line:#d8dee6; --line-soft:#e9edf2;
+  --accent:#1e6a86; --accent-soft:#e1eef4;
+  --warn:#a8540c; --warn-soft:#fcefe2;
+  --ok:#2a7549; --ok-soft:#e4f2e9;
+  --na:#8b95a1; --na-soft:#eef1f4;
+  --font-ui:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1418; --surface:#171d24; --fg:#e3e8ed; --muted:#97a3af; --line:#2a333d; --line-soft:#222a33;
+    --accent:#62b5d1; --accent-soft:#173440;
+    --warn:#f0a65b; --warn-soft:#3a2610;
+    --ok:#70c995; --ok-soft:#153222;
+    --na:#6f7b87; --na-soft:#1f262e;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1418; --surface:#171d24; --fg:#e3e8ed; --muted:#97a3af; --line:#2a333d; --line-soft:#222a33;
+  --accent:#62b5d1; --accent-soft:#173440;
+  --warn:#f0a65b; --warn-soft:#3a2610;
+  --ok:#70c995; --ok-soft:#153222;
+  --na:#6f7b87; --na-soft:#1f262e;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+code,.val{font-family:var(--font-mono);font-size:12.5px}
+h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding-block:10px;padding-inline:16px}
+.top .bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.top .meta{color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 14px}
+.top .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.top input[type=search]{min-width:200px;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.top select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+label.chk{display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
+
+.runbar{background:var(--surface);border-bottom:1px solid var(--line);padding-block:10px;padding-inline:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.runbar input[type=text]{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);min-width:160px}
+.btn{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+#log{margin:0;padding:10px 16px;max-height:180px;overflow:auto;font-family:var(--font-mono);font-size:12px;background:var(--surface);border-bottom:1px solid var(--line);color:var(--muted);white-space:pre-wrap}
+
+.summary{display:flex;flex-wrap:wrap;gap:10px;padding-block:14px 0;padding-inline:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px}
+.tile .n{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile.warn .n{color:var(--warn)} .tile.ok .n{color:var(--ok)}
+
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;padding-block:14px 40px;padding-inline:16px;align-items:start}
+@media (max-width:820px){.layout{grid-template-columns:minmax(0,1fr)}}
+.rail{background:var(--surface);border:1px solid var(--line);border-radius:8px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 62px);max-height:calc(100vh - 80px);display:flex;flex-direction:column;min-width:0}
+@media (max-width:820px){.rail{position:static;max-height:280px}}
+.rail .hd{padding:10px 12px;border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column;gap:6px}
+.fleet{display:flex;flex-wrap:wrap;gap:4px}
+.fleet span{font-size:11.5px;background:var(--na-soft);color:var(--muted);border-radius:4px;padding:1px 6px;font-variant-numeric:tabular-nums}
+.devlist{overflow:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+.dev{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;text-align:left;padding:5px 8px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;width:100%}
+.dev:hover{background:var(--bg)}
+.dev.sel{background:var(--accent-soft);border-color:var(--accent)}
+.dev .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev .sub{grid-column:1;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev .cnt{grid-row:1/3;font-variant-numeric:tabular-nums;font-size:12px;border-radius:10px;padding:1px 8px;background:var(--na-soft);color:var(--muted)}
+.dev .cnt.w{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.dev .cnt.err{background:var(--warn);color:#fff}
+
+.filterline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;color:var(--muted);min-height:24px}
+.filterline b{color:var(--fg)}
+.sections{display:flex;flex-direction:column;gap:10px;min-width:0}
+details.sec{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-width:0}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:9px 12px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:"";width:0;height:0;border:5px solid transparent;border-left-color:var(--muted);margin-right:-2px;transition:transform .15s}
+details.sec[open]>summary::before{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){details.sec>summary::before{transition:none}}
+.path{font-family:var(--font-mono);font-weight:500}
+.badge{font-size:11.5px;border-radius:10px;padding:1px 8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.badge.w{background:var(--warn-soft);color:var(--warn)} .badge.ok{background:var(--ok-soft);color:var(--ok)} .badge.na{background:var(--na-soft);color:var(--muted)}
+.rows{border-top:1px solid var(--line-soft)}
+.row{display:grid;grid-template-columns:minmax(140px,220px) minmax(0,1fr);gap:4px 14px;padding:8px 12px;border-top:1px solid var(--line-soft)}
+.row:first-child{border-top:0}
+@media (max-width:600px){.row{grid-template-columns:minmax(0,1fr)}}
+.row.same{color:var(--muted)}
+.lbl{min-width:0;overflow-wrap:anywhere}
+.lbl .item{font-weight:500}
+.lbl .field{font-family:var(--font-mono);font-size:12px;color:var(--muted);display:block}
+.groups{display:flex;flex-direction:column;gap:4px;min-width:0}
+.grp{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;min-width:0}
+.grp .val{background:var(--na-soft);padding:1px 7px;border-radius:4px;overflow-wrap:anywhere;max-width:100%}
+.grp.ref .val{background:var(--ok-soft);color:var(--ok)}
+.grp.dev .val{background:var(--warn-soft);color:var(--warn)}
+.row.same .grp.ref .val{background:var(--na-soft);color:inherit}
+.grp .val.sp{font-style:italic;color:var(--muted)}
+.grp .cnt{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;min-width:2.2em;text-align:right}
+.grp .tag{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.chips{display:inline-flex;flex-wrap:wrap;gap:3px;min-width:0}
+.chip{font-size:11.5px;padding:0 7px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;line-height:18px}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+.more{font-size:11.5px;color:var(--accent);background:none;border:0;cursor:pointer;padding:0 4px}
+.empty{padding:30px 16px;color:var(--muted);text-align:center;background:var(--surface);border:1px dashed var(--line);border-radius:8px}
+.hidden{display:none !important}
+</style>
+
+<header class="top">
+  <div class="bar">
+    <div>
+      <h1>Switch Config Drift</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="ctl">
+      <input type="search" id="q" placeholder="Filter path, item, field or value" aria-label="Filter">
+      <select id="baseline" aria-label="Reference device"></select>
+      <label class="chk"><input type="checkbox" id="showsame"> show identical rows</label>
+    </div>
+  </div>
+</header>
+
+<div id="serve" class="hidden">
+  <div class="runbar">
+    <span style="color:var(--muted)">Inventory <code id="inv"></code></span>
+    <input type="text" id="rb-paths" placeholder="paths filter, e.g. /interface/bridge /snmp" title="Only compare menu paths containing one of these strings">
+    <label class="chk"><input type="checkbox" id="rb-ports"> include port menus</label>
+    <button class="btn" id="rb-discover">Discover only</button>
+    <button class="btn primary" id="rb-run">Run comparison</button>
+    <span id="rb-status" style="color:var(--muted)"></span>
+  </div>
+  <pre id="log" class="hidden"></pre>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<main class="layout">
+  <aside class="rail">
+    <div class="hd">
+      <h2>Devices <span id="devcount"></span></h2>
+      <div class="fleet" id="fleet"></div>
+    </div>
+    <div class="devlist" id="devlist"></div>
+  </aside>
+  <div>
+    <div class="filterline" id="filterline"></div>
+    <div class="sections" id="sections"></div>
+  </div>
+</main>
+
+<script>
+const EMBEDDED = __DATA__;
+const SERVE = __SERVE__;
+const NA = "\u0000na", ABS = "\u0000absent", MIS = "\u0000missing";
+const S = { data: null, q: "", baseline: -1, showSame: false, dev: -1, outliers: [], devRows: [] };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function disp(v){ if (v === NA) return "n/a"; if (v === ABS) return "absent"; if (v === MIS) return "unset"; if (v === "") return '""'; return v; }
+const special = v => v === NA || v === ABS || v === MIS;
+
+function refGroup(row){
+  if (S.baseline >= 0){ const g = row.groups.find(g => g[1].includes(S.baseline)); if (g) return g; }
+  return row.groups.reduce((a, b) => (b[1].length > a[1].length ? b : a), row.groups[0]);
+}
+
+function analyse(){
+  const d = S.data, n = d.devices.length;
+  S.outliers = new Array(n).fill(0);
+  S.devRows = Array.from({length:n}, () => new Set());
+  d.sections.forEach((sec, si) => sec.rows.forEach((row, ri) => {
+    if (!row.differs || !row.groups.length) return;
+    const ref = refGroup(row);
+    row.groups.forEach(g => { if (g === ref) return; g[1].forEach(i => { S.outliers[i]++; S.devRows[i].add(si + ":" + ri); }); });
+  }));
+}
+
+function renderMeta(){
+  const d = S.data;
+  const nDiff = d.sections.filter(s => s.rows.some(r => r.differs) || (s.unavailable.length && s.unavailable.length < d.devices.length)).length;
+  const nUnavail = d.sections.filter(s => s.unavailable.length === d.devices.length).length;
+  const nSame = d.sections.length - nDiff - nUnavail;
+  const nOut = S.outliers.filter(x => x > 0).length;
+  $("meta").innerHTML = `<span>${esc(d.generated)}</span><span>${d.devices.length} devices</span><span>${d.sections.length} menus compared</span>`;
+  $("summary").innerHTML =
+    `<div class="tile ${nDiff ? "warn" : "ok"}"><div class="n">${nDiff}</div><div class="l">menus with drift</div></div>` +
+    `<div class="tile ok"><div class="n">${nSame}</div><div class="l">menus identical</div></div>` +
+    `<div class="tile ${nOut ? "warn" : "ok"}"><div class="n">${nOut}</div><div class="l">devices deviating from ${S.baseline >= 0 ? "baseline" : "majority"}</div></div>` +
+    (nUnavail ? `<div class="tile"><div class="n" style="color:var(--na)">${nUnavail}</div><div class="l">menus on no device</div></div>` : "");
+  const sel = $("baseline"); const cur = sel.value;
+  sel.innerHTML = `<option value="-1">Reference: majority</option>` + d.devices.map((x, i) => `<option value="${i}">Reference: ${esc(x.name)}</option>`).join("");
+  sel.value = String(S.baseline);
+}
+
+function renderDevices(){
+  const d = S.data;
+  $("devcount").textContent = `(${d.devices.length})`;
+  const combos = {};
+  d.devices.forEach(x => { const k = `${x.board} · ${x.version}`; combos[k] = (combos[k] || 0) + 1; });
+  $("fleet").innerHTML = Object.entries(combos).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<span>${n} × ${esc(k)}</span>`).join("");
+  const order = d.devices.map((x, i) => i).sort((a, b) => S.outliers[b] - S.outliers[a] || d.devices[a].name.localeCompare(d.devices[b].name));
+  $("devlist").innerHTML = order.map(i => {
+    const x = d.devices[i], c = S.outliers[i];
+    const sub = [x.identity && x.identity !== x.name ? x.identity : null, x.host].filter(Boolean).join(" · ");
+    return `<button class="dev${S.dev === i ? " sel" : ""}" data-dev="${i}" title="${esc(x.board)} RouterOS ${esc(x.version)}"><span class="nm">${esc(x.name)}</span><span class="cnt${c ? " w" : ""}">${c}</span><span class="sub">${esc(sub)}</span></button>`;
+  }).join("");
+}
+
+function rowMatches(sec, row, ri, si){
+  if (S.dev >= 0 && !S.devRows[S.dev].has(si + ":" + ri)) return false;
+  if (!S.showSame && !row.differs && S.dev < 0) return false;
+  if (S.q){
+    const hay = (sec.path + " " + row.item + " " + row.field + " " + row.groups.map(g => disp(g[0])).join(" ")).toLowerCase();
+    if (!hay.includes(S.q)) return false;
+  }
+  return true;
+}
+
+function chips(idx, limit){
+  const d = S.data;
+  const names = idx.map(i => `<button class="chip${S.dev === i ? " sel" : ""}" data-dev="${i}">${esc(d.devices[i].name)}</button>`);
+  if (names.length <= limit) return `<span class="chips">${names.join("")}</span>`;
+  return `<span class="chips"><span class="chips">${names.slice(0, limit).join("")}</span><span class="chips hidden">${names.slice(limit).join("")}</span><button class="more" data-more>+${names.length - limit} more</button></span>`;
+}
+
+function renderSections(){
+  const d = S.data, n = d.devices.length;
+  const out = [];
+  d.sections.forEach((sec, si) => {
+    if (sec.unavailable.length === n) return;
+    if (S.q && !sec.path.toLowerCase().includes(S.q) && !sec.rows.some((r, ri) => rowMatches(sec, r, ri, si))) return;
+    const rows = sec.rows.map((r, ri) => [r, ri]).filter(([r, ri]) => rowMatches(sec, r, ri, si));
+    const nd = sec.rows.filter(r => r.differs).length;
+    const partial = sec.unavailable.length > 0;
+    if (!rows.length && !(partial && !S.q && S.dev < 0)) return;
+    const items = new Set(sec.rows.map(r => r.item)).size;
+    const diffItems = new Set(sec.rows.filter(r => r.differs).map(r => r.item)).size;
+    let h = `<details class="sec"${nd || partial || S.dev >= 0 || S.q ? " open" : ""}><summary><span class="path">${esc(sec.path)}</span>` +
+      (nd ? `<span class="badge w">${diffItems} of ${items} items differ</span>` : `<span class="badge ok">identical</span>`) +
+      (partial ? `<span class="badge na">not on ${sec.unavailable.length}</span>` : "") + `</summary>`;
+    if (partial) h += `<div class="row"><div class="lbl"><span class="item">menu not available</span><span class="field">model or RouterOS version lacks it</span></div><div class="groups"><div class="grp"><span class="cnt">${sec.unavailable.length}</span>${chips(sec.unavailable, 12)}</div></div></div>`;
+    h += `<div class="rows">`;
+    rows.forEach(([r]) => {
+      const ref = refGroup(r);
+      const groups = r.groups.slice().sort((a, b) => (a === ref ? -1 : b === ref ? 1 : b[1].length - a[1].length));
+      h += `<div class="row${r.differs ? "" : " same"}"><div class="lbl"><span class="item">${esc(r.item || "settings")}</span><span class="field">${esc(r.field)}</span></div><div class="groups">`;
+      groups.forEach(g => {
+        const isRef = g === ref, mine = S.dev >= 0 && g[1].includes(S.dev);
+        const tag = isRef ? (S.baseline >= 0 && g[1].includes(S.baseline) ? "baseline" : "majority") : "";
+        const devs = isRef && g[1].length > 8 && !mine ? `<span class="tag">${g[1].length} devices</span>` : chips(g[1], 12);
+        h += `<div class="grp${isRef ? " ref" : ""}${mine ? " dev" : ""}"><span class="cnt">${g[1].length}</span><code class="val${special(g[0]) ? " sp" : ""}">${esc(disp(g[0]))}</code>${tag && r.differs ? `<span class="tag">${tag}</span>` : ""}${r.differs ? devs : ""}</div>`;
+      });
+      h += `</div></div>`;
+    });
+    h += `</div></details>`;
+    out.push(h);
+  });
+  $("sections").innerHTML = out.length ? out.join("") : `<div class="empty">${S.dev >= 0 ? "This device matches the reference everywhere." : "Nothing matches the current filter."}</div>`;
+  const fl = $("filterline");
+  if (S.dev >= 0){
+    const x = d.devices[S.dev];
+    fl.innerHTML = `Showing where <b>${esc(x.name)}</b> deviates from the ${S.baseline >= 0 ? "baseline" : "majority"} (${S.outliers[S.dev]} rows) <button class="btn" id="cleardev">Show all</button>`;
+    $("cleardev").onclick = () => { S.dev = -1; redraw(); };
+  } else fl.innerHTML = "";
+}
+
+function redraw(){ analyse(); renderMeta(); renderDevices(); renderSections(); }
+
+function load(data){
+  S.data = data;
+  if (data.baseline){ const i = data.devices.findIndex(x => x.name === data.baseline); if (i >= 0) S.baseline = i; }
+  redraw();
+}
+
+document.addEventListener("click", e => {
+  const chip = e.target.closest("[data-dev]");
+  if (chip){ const i = +chip.dataset.dev; S.dev = S.dev === i ? -1 : i; redraw(); return; }
+  const more = e.target.closest("[data-more]");
+  if (more){ more.previousElementSibling.classList.remove("hidden"); more.remove(); }
+});
+$("q").addEventListener("input", e => { S.q = e.target.value.trim().toLowerCase(); renderSections(); });
+$("baseline").addEventListener("change", e => { S.baseline = +e.target.value; redraw(); });
+$("showsame").addEventListener("change", e => { S.showSame = e.target.checked; try { localStorage.setItem("mt.showsame", S.showSame ? "1" : "0"); } catch (_) {} renderSections(); });
+try { if (localStorage.getItem("mt.showsame") === "1"){ S.showSame = true; $("showsame").checked = true; } } catch (_) {}
+
+if (EMBEDDED) load(EMBEDDED);
+
+if (SERVE){
+  $("serve").classList.remove("hidden");
+  const logEl = $("log"), st = $("rb-status");
+  let timer = null;
+  async function refreshStatus(){
+    const r = await fetch("/api/status"); const j = await r.json();
+    $("inv").textContent = j.inventory || "";
+    logEl.textContent = (j.log || []).join("\n"); logEl.scrollTop = logEl.scrollHeight;
+    logEl.classList.toggle("hidden", !(j.log || []).length);
+    $("rb-run").disabled = $("rb-discover").disabled = !!j.running;
+    st.textContent = j.running ? "running…" : (j.error ? "failed: " + j.error : (j.done ? "done" : ""));
+    if (!j.running && timer){ clearInterval(timer); timer = null; if (j.done && j.has_data){ const d = await (await fetch("/api/data")).json(); load(d); } }
+  }
+  async function run(discoverOnly){
+    await fetch("/api/run", { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ discover: discoverOnly, with_ports: $("rb-ports").checked, paths: $("rb-paths").value.trim() }) });
+    timer = setInterval(refreshStatus, 1000); refreshStatus();
+  }
+  $("rb-run").onclick = () => run(false);
+  $("rb-discover").onclick = () => run(true);
+  refreshStatus().then(async () => { try { const r = await fetch("/api/data"); if (r.ok) load(await r.json()); } catch (_) {} });
+}
+</script>

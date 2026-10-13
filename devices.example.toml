@@ -1,0 +1,57 @@
+# mtcompare inventory. Copy to devices.toml and edit.
+
+[defaults]
+transport  = "rest"        # "rest" (RouterOS v7.1+, needs www-ssl or www service) or "ssh"
+user       = "api"
+password = "Gp9pinAoxiPzoeWdyyVDjhuN"         # or leave unset and export MT_PASSWORD=... (or --ask-password)
+password_env = "Gp9pinAoxiPzoeWdyyVDjhuN"
+scheme     = "https"       # "http" if you only enabled the plain www service
+verify_tls = false         # MikroTik self-signed certs; set true if you installed real ones
+timeout    = 15
+# ssh settings (used when transport = "ssh")
+# ssh_user = "admin"
+# ssh_key  = "~/.ssh/id_ed25519"
+# ssh_port = 22
+# ssh_options = ["-o", "StrictHostKeyChecking=accept-new"]
+# show_sensitive = false   # add `show-sensitive` to /export
+
+# --- Option A: scan subnets / ranges. Every address that answers on the REST
+# (443/80) or SSH (22) port and returns a RouterOS identity becomes a device,
+# named after its identity. Takes all [defaults]; per-scan overrides allowed.
+[[subnets]]
+cidr = "192.168.4.0/24"                 # string or list of strings
+#exclude = ["10.0.0.1", "10.0.0.250/31"]   # addresses or CIDRs to skip (routers, gateways …)
+# range = "10.0.1.10-10.0.1.120"     # or "10.0.1.10-120"; string or list
+# hosts = ["10.0.9.5", "sw-lab.example.net"]
+# port = 8443                        # non-standard REST port
+# probe_timeout = 1.0                # TCP connect timeout per address
+# transport = "rest"
+
+#[[subnets]]
+#range = "192.168.4.1-130"
+
+# --- Option B: explicit devices (can be mixed with scans; `./mtcompare.py -i devices.toml --discover`
+# prints the scan result in this format if you prefer to freeze the list).
+[[devices]]
+name = "daniel-desk"
+host = "192.168.4.22"
+
+#[[devices]]
+#name = "sw-access-7"
+#host = "10.0.0.17"
+#transport = "ssh"          # per-device overrides are allowed
+#ssh_user  = "netops"
+
+# Optional: replace the built-in path list entirely (see --list-paths)
+# [sections]
+# paths = ["/interface/bridge", "/interface/bridge/settings", "/snmp"]
+# ignore_fields   = ["comment"]      # extra fields to ignore everywhere
+# unignore_fields = ["mac-address"]  # bring a default-ignored field back
+
+# Optional: ignore fields only within one path
+# [ignore_by_path]
+# "/system/scheduler" = ["start-date", "start-time"]
+
+# Optional: how to match list items between devices
+# [item_keys]
+# "/ip/firewall/filter" = ["chain", "comment"]

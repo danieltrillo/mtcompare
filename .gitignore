@@ -1,0 +1,7 @@
+# real inventory (hosts/passwords) and generated output stay local
+devices.toml
+snapshots/
+*.html
+!report.html
+__pycache__/
+*.pyc
